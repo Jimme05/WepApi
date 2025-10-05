@@ -17,14 +17,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 );
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend",
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:4200") // 👈 Angular dev server
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials(); // ถ้ามี cookie/session
-        });
+    options.AddPolicy("AllowAll",
+        policy => policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+    );
 });
 
 builder.Services.AddControllers();
