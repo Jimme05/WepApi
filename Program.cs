@@ -43,7 +43,7 @@ app.MapGet("/db-ping", async (AppDbContext db) =>
         return Results.Problem(ex.Message);
     }
 });
-app.UseCors("AllowFrontend");
+app.UseCors("AllowAll");
 app.UseSwagger();
 app.UseSwaggerUI();
 
