@@ -2,7 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using SimpleAuthBasicApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+    serverOptions.ListenAnyIP(int.Parse(port));
+});
 // เชื่อมต่อ MySQL
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
