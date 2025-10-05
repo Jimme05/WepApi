@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimpleAuthBasicApi.Data;
 using SimpleAuthBasicApi.Models;
+using System.Text.RegularExpressions;
 
 namespace SimpleAuthControllerApi.Controllers;
 
@@ -10,41 +11,51 @@ namespace SimpleAuthControllerApi.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public AuthController(AppDbContext db) => _db = db;
-
-   public class RegisterDto
-{
-    public string Name { get; set; } = "";
-    public string Email { get; set; } = "";
-    public string Password { get; set; } = "";
-    public IFormFile? ProfileImage { get; set; }
-}
-
-[HttpPost("register")]
-public async Task<IActionResult> Register([FromForm] RegisterDto dto)
-{
-    if (string.IsNullOrEmpty(dto.Email) || string.IsNullOrEmpty(dto.Password))
-        return BadRequest(new { message = "ข้อมูลไม่ครบ" });
-
-    string? filePath = null;
-
-    if (dto.ProfileImage != null)
+    private readonly IWebHostEnvironment _env;
+    public AuthController(AppDbContext db, IWebHostEnvironment env)
     {
-        var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/profile");
-        if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
-
-        filePath = Path.Combine(uploads, dto.ProfileImage.FileName);
-        using var stream = new FileStream(filePath, FileMode.Create);
-        await dto.ProfileImage.CopyToAsync(stream);
+        _db = db;
+        _env = env;
     }
 
-    return Ok(new
+
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromForm] RegisterDto dto)
     {
-        dto.Name,
-        dto.Email,
-        ProfileImagePath = filePath != null ? $"/profile/{dto.ProfileImage.FileName}" : null
-    });
-}
+        string? savedPath = null;
+
+        if (dto.ProfileImage != null)
+        {
+            var folder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "profile");
+            if (!Directory.Exists(folder))
+                Directory.CreateDirectory(folder);
+
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.ProfileImage.FileName);
+            var filePath = Path.Combine(folder, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await dto.ProfileImage.CopyToAsync(stream);
+            }
+
+            savedPath = "/profile/" + fileName; // 👉 DB เก็บ path
+        }
+
+        var user = new User
+        {
+            Name = dto.Name,
+            Email = dto.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+            AvatarUrl = savedPath
+        };
+
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { user.Id, user.Email, user.AvatarUrl });
+    }
+
+
 
 
     [HttpPost("login")]
@@ -54,7 +65,7 @@ public async Task<IActionResult> Register([FromForm] RegisterDto dto)
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new { message = "Invalid email or password" });
 
-        return Ok(new { id = user.Id, email = user.Email, role = user.Role });
+        return Ok(new { id = user.Id, email = user.Email, role = user.Role, name = user.Name });
     }
 
     // ไม่มี token/cookie => ทุกครั้งที่อยากได้ "ข้อมูลตัวเอง" ต้องส่ง email+password อีกครั้ง
@@ -91,45 +102,46 @@ public async Task<IActionResult> Register([FromForm] RegisterDto dto)
     }
 
 
+
+   
     
-    [HttpPut("update/{id}")]
-public async Task<IActionResult> UpdateUser(int id, [FromForm] UpdateUserDto dto, IFormFile? profileImage)
+    [HttpPut("updateByEmail")]
+public async Task<IActionResult> UpdateByEmail([FromForm] UpdateUserByEmailDto dto, IFormFile? profileImage)
 {
-    var user = await _db.Users.FindAsync(id);
+    var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
     if (user == null)
         return NotFound(new { message = "User not found" });
 
-    // อัปเดตข้อมูลพื้นฐาน
     user.Name = dto.Name ?? user.Name;
-    user.Email = dto.Email ?? user.Email;
 
     if (!string.IsNullOrEmpty(dto.Password))
     {
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
     }
 
-    // อัปโหลดไฟล์ใหม่ (ถ้ามี)
     if (profileImage != null)
     {
-        var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-        if (!Directory.Exists(uploads))
-            Directory.CreateDirectory(uploads);
-
-        var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
-        var filePath = Path.Combine(uploads, fileName);
+        var fileName = $"{Guid.NewGuid()}_{profileImage.FileName}";
+        var filePath = Path.Combine(_env.WebRootPath, "profile", fileName);
 
         using (var stream = new FileStream(filePath, FileMode.Create))
         {
             await profileImage.CopyToAsync(stream);
         }
 
-        user.AvatarUrl = $"/uploads/{fileName}";
+        user.AvatarUrl = fileName;
     }
 
-    _db.Users.Update(user);
     await _db.SaveChangesAsync();
 
-    return Ok(new { message = "User updated successfully", user });
+    return Ok(new
+    {
+        user.Id,
+        user.Name,
+        user.Email,
+        user.AvatarUrl,
+        user.Role
+    });
 }
 
 }
