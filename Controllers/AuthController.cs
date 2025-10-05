@@ -12,37 +12,40 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     public AuthController(AppDbContext db) => _db = db;
 
-   [HttpPost("register")]
-public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile? profileImage)
+   public class RegisterDto
+{
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+    public IFormFile? ProfileImage { get; set; }
+}
+
+[HttpPost("register")]
+public async Task<IActionResult> Register([FromForm] RegisterDto dto)
 {
     if (string.IsNullOrEmpty(dto.Email) || string.IsNullOrEmpty(dto.Password))
         return BadRequest(new { message = "ข้อมูลไม่ครบ" });
 
-    string fileName = "default.png";
-    if (profileImage != null)
+    string? filePath = null;
+
+    if (dto.ProfileImage != null)
     {
-        // สร้างชื่อไฟล์ไม่ให้ซ้ำ
-        fileName = $"{Guid.NewGuid()}_{profileImage.FileName}";
-        var savePath = Path.Combine("wwwroot/profile", fileName);
-        using (var stream = new FileStream(savePath, FileMode.Create))
-        {
-            await profileImage.CopyToAsync(stream);
-        }
+        var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/profile");
+        if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
+
+        filePath = Path.Combine(uploads, dto.ProfileImage.FileName);
+        using var stream = new FileStream(filePath, FileMode.Create);
+        await dto.ProfileImage.CopyToAsync(stream);
     }
 
-    var user = new User {
-        Name = dto.Name,
-        Email = dto.Email,
-        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-        AvatarUrl = fileName,
-        Role = "User"
-    };
-
-    _db.Users.Add(user);
-    await _db.SaveChangesAsync();
-
-    return Ok(new { id = user.Id, email = user.Email, role = user.Role, profileImage = fileName });
+    return Ok(new
+    {
+        dto.Name,
+        dto.Email,
+        ProfileImagePath = filePath != null ? $"/profile/{dto.ProfileImage.FileName}" : null
+    });
 }
+
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
