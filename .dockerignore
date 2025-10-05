@@ -1,0 +1,9 @@
+bin/
+obj/
+*.db
+*.sqlite
+*.user
+node_modules/
+.git
+Dockerfile
+docker-compose.yml
