@@ -62,15 +62,39 @@ public class AuthController : ControllerBase
     }
 
     // ไม่มี token/cookie => ทุกครั้งที่อยากได้ "ข้อมูลตัวเอง" ต้องส่ง email+password อีกครั้ง
-    [HttpPost("me")]
-    public async Task<IActionResult> Me([FromBody] LoginDto dto)
-    {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
-        if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-            return Unauthorized(new { message = "Invalid credentials" });
 
-        return Ok(new { id = user.Id, email = user.Email, role = user.Role });
+    [HttpPost("me")]
+    public async Task<IActionResult> Me([FromBody] EmailDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { message = "Email is required." });
+
+        var email = dto.Email.Trim().ToLower();
+
+        var user = await _db.Users
+            .AsNoTracking()
+            //.Include(u => u.OwnedGames)         // ถ้ามีตารางลูก
+            //.Include(u => u.Wallet)             // ถ้ามี wallet แยกตาราง
+            .SingleOrDefaultAsync(u => u.Email.ToLower() == email);
+
+        if (user == null) return NotFound(new { message = "User not found." });
+
+        // ✅ อย่าส่งรหัสผ่าน/แฮชกลับ
+        var result = new
+        {
+            id = user.Id,
+            name = user.Name,             // หรือ Username
+            email = user.Email,
+            role = user.Role,
+            profileImage = user.AvatarUrl,
+            createdAt = user.CreatedAt,
+            // ownedGames = user.OwnedGames.Select(g => new { g.Id, g.Title }) // ถ้ามี
+        };
+
+        return Ok(result);
     }
+
+
     
     [HttpPut("update/{id}")]
 public async Task<IActionResult> UpdateUser(int id, [FromForm] UpdateUserDto dto, IFormFile? profileImage)
