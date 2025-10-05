@@ -43,9 +43,10 @@ app.MapGet("/db-ping", async (AppDbContext db) =>
         return Results.Problem(ex.Message);
     }
 });
-app.UseStaticFiles();
+
 
 app.UseCors("AllowAll");
+app.UseStaticFiles();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseStaticFiles();
