@@ -12,43 +12,43 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     public AuthController(AppDbContext db) => _db = db;
 
-   [HttpPost("register")]
-public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile? profileImage)
-{
-    string? filePath = null;
-
-    if (profileImage != null)
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile? profileImage)
     {
-        var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-        if (!Directory.Exists(uploads))
-            Directory.CreateDirectory(uploads);
+        string? filePath = null;
 
-        var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
-        filePath = Path.Combine(uploads, fileName);
-
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        if (profileImage != null)
         {
-            await profileImage.CopyToAsync(stream);
+            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            if (!Directory.Exists(uploads))
+                Directory.CreateDirectory(uploads);
+
+            var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
+            filePath = Path.Combine(uploads, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await profileImage.CopyToAsync(stream);
+            }
+
+            // เก็บ path เป็น URL
+            filePath = $"/uploads/{fileName}";
         }
 
-        // เก็บ path เป็น URL
-        filePath = $"/uploads/{fileName}";
+        // ตัวอย่างบันทึก user
+        var user = new User
+        {
+            Name = dto.Name,
+            Email = dto.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+            AvatarUrl = filePath
+        };
+
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "สมัครสมาชิกสำเร็จ", user });
     }
-
-    // ตัวอย่างบันทึก user
-    var user = new User
-    {
-        Name = dto.Name,
-        Email = dto.Email,
-        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-        AvatarUrl = filePath
-    };
-
-    _db.Users.Add(user);
-    await _db.SaveChangesAsync();
-
-    return Ok(new { message = "สมัครสมาชิกสำเร็จ", user });
-}
 
 
     [HttpPost("login")]
@@ -71,4 +71,45 @@ public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile?
 
         return Ok(new { id = user.Id, email = user.Email, role = user.Role });
     }
+    
+    [HttpPut("update/{id}")]
+public async Task<IActionResult> UpdateUser(int id, [FromForm] UpdateUserDto dto, IFormFile? profileImage)
+{
+    var user = await _db.Users.FindAsync(id);
+    if (user == null)
+        return NotFound(new { message = "User not found" });
+
+    // อัปเดตข้อมูลพื้นฐาน
+    user.Name = dto.Name ?? user.Name;
+    user.Email = dto.Email ?? user.Email;
+
+    if (!string.IsNullOrEmpty(dto.Password))
+    {
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+    }
+
+    // อัปโหลดไฟล์ใหม่ (ถ้ามี)
+    if (profileImage != null)
+    {
+        var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+        if (!Directory.Exists(uploads))
+            Directory.CreateDirectory(uploads);
+
+        var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
+        var filePath = Path.Combine(uploads, fileName);
+
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await profileImage.CopyToAsync(stream);
+        }
+
+        user.AvatarUrl = $"/uploads/{fileName}";
+    }
+
+    _db.Users.Update(user);
+    await _db.SaveChangesAsync();
+
+    return Ok(new { message = "User updated successfully", user });
+}
+
 }
