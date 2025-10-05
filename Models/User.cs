@@ -14,7 +14,11 @@ public class User
     public DateTime CreatedAt { get; set; }
 }
 
-public record RegisterDto(string Name, string Email, string Password);
+public class RegisterDto {
+    public string Name { get; set; }
+    public string Email { get; set; }
+    public string Password { get; set; }
+}
 public record LoginDto(string Email, string Password); // for Swagger try-out convenience
 public record UpdateProfileDto(string? Name, string? DisplayName);
 

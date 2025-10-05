@@ -12,44 +12,37 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     public AuthController(AppDbContext db) => _db = db;
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile? profileImage)
+   [HttpPost("register")]
+public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile? profileImage)
+{
+    if (string.IsNullOrEmpty(dto.Email) || string.IsNullOrEmpty(dto.Password))
+        return BadRequest(new { message = "ข้อมูลไม่ครบ" });
+
+    string fileName = "default.png";
+    if (profileImage != null)
     {
-        string? filePath = null;
-
-        if (profileImage != null)
+        // สร้างชื่อไฟล์ไม่ให้ซ้ำ
+        fileName = $"{Guid.NewGuid()}_{profileImage.FileName}";
+        var savePath = Path.Combine("wwwroot/profile", fileName);
+        using (var stream = new FileStream(savePath, FileMode.Create))
         {
-            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-            if (!Directory.Exists(uploads))
-                Directory.CreateDirectory(uploads);
-
-            var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
-            filePath = Path.Combine(uploads, fileName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await profileImage.CopyToAsync(stream);
-            }
-
-            // เก็บ path เป็น URL
-            filePath = $"/uploads/{fileName}";
+            await profileImage.CopyToAsync(stream);
         }
-
-        // ตัวอย่างบันทึก user
-        var user = new User
-        {
-            Name = dto.Name,
-            Email = dto.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-            AvatarUrl = filePath
-        };
-
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-
-        return Ok(new { message = "สมัครสมาชิกสำเร็จ", user });
     }
 
+    var user = new User {
+        Name = dto.Name,
+        Email = dto.Email,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+        AvatarUrl = fileName,
+        Role = "User"
+    };
+
+    _db.Users.Add(user);
+    await _db.SaveChangesAsync();
+
+    return Ok(new { id = user.Id, email = user.Email, role = user.Role, profileImage = fileName });
+}
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
