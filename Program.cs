@@ -19,15 +19,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
-var allowedOrigin = builder.Configuration["Cors:Origin"] ?? "http://localhost:4200";
-
-builder.Services.AddCors(o => o.AddPolicy("Web", p => p
-    .WithOrigins(allowedOrigin)
-    .AllowAnyHeader()
-    .AllowAnyMethod()
-));
-
-app.UseCors("Web");
 
 app.MapGet("/db-ping", async (AppDbContext db) =>
 {
