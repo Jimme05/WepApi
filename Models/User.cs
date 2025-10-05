@@ -14,6 +14,6 @@ public class User
     public DateTime CreatedAt { get; set; }
 }
 
-public record RegisterDto(string Name, string Email, string Password);
+public record RegisterDto(string Name, string Email, string Password, string? AvatarUrl);
 public record LoginDto(string Email, string Password); // for Swagger try-out convenience
 public record UpdateProfileDto(string? Name, string? DisplayName);

@@ -19,7 +19,7 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Email already registered" });
 
         var hash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
-        var user = new User { Email = dto.Email, PasswordHash = hash, Name = dto.Name };
+        var user = new User { Email = dto.Email, PasswordHash = hash, Name = dto.Name, AvatarUrl = dto.AvatarUrl };
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
         return Ok(new { message = "Registered successfully" });
