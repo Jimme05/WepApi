@@ -12,18 +12,44 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     public AuthController(AppDbContext db) => _db = db;
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterDto dto)
-    {
-        if (await _db.Users.AnyAsync(u => u.Email == dto.Email))
-            return BadRequest(new { message = "Email already registered" });
+   [HttpPost("register")]
+public async Task<IActionResult> Register([FromForm] RegisterDto dto, IFormFile? profileImage)
+{
+    string? filePath = null;
 
-        var hash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
-        var user = new User { Email = dto.Email, PasswordHash = hash, Name = dto.Name, AvatarUrl = dto.AvatarUrl };
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-        return Ok(new { message = "Registered successfully" });
+    if (profileImage != null)
+    {
+        var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+        if (!Directory.Exists(uploads))
+            Directory.CreateDirectory(uploads);
+
+        var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
+        filePath = Path.Combine(uploads, fileName);
+
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await profileImage.CopyToAsync(stream);
+        }
+
+        // เก็บ path เป็น URL
+        filePath = $"/uploads/{fileName}";
     }
+
+    // ตัวอย่างบันทึก user
+    var user = new User
+    {
+        Name = dto.Name,
+        Email = dto.Email,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+        AvatarUrl = filePath
+    };
+
+    _db.Users.Add(user);
+    await _db.SaveChangesAsync();
+
+    return Ok(new { message = "สมัครสมาชิกสำเร็จ", user });
+}
+
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
