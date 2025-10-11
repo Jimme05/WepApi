@@ -26,19 +26,13 @@ public class AuthController : ControllerBase
 
         if (dto.ProfileImage != null)
         {
-            var folder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "profile");
-            if (!Directory.Exists(folder))
-                Directory.CreateDirectory(folder);
-
+        
             var fileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.ProfileImage.FileName);
-            var filePath = Path.Combine(folder, fileName);
+        
 
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await dto.ProfileImage.CopyToAsync(stream);
-            }
+           
 
-            savedPath = "/profile/" + fileName; // 👉 DB เก็บ path
+            savedPath = fileName; // 👉 DB เก็บ path
         }
 
         var user = new User
