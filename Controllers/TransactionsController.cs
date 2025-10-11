@@ -14,6 +14,20 @@ public class TransactionsController : ControllerBase
 
     // GET: /api/Transactions/by-user?email=xxx@yyy.com
     // หรือ /api/Transactions/by-user?userId=123
+     [HttpGet]
+    // [Authorize(Roles = "Admin")] // ถ้ายังไม่ได้เปิด Auth ให้คอมเมนต์ไว้ก่อน
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _db.Users
+            .Select(u => new {
+                u.Id,
+                u.Name,
+                u.Email,
+            })
+            .ToListAsync();
+
+        return Ok(users);
+    }
     [HttpGet("by-user")]
     public async Task<IActionResult> GetByUser([FromQuery] string? email, [FromQuery] string? userId)
     {
