@@ -20,61 +20,59 @@ public class AuthController : ControllerBase
 
 
     [HttpPost("register")]
-public async Task<IActionResult> Register([FromForm] RegisterDto dto)
-{
-    string? savedFileName = null;
-
-    // ถ้ามีรูปโปรไฟล์แนบมาด้วย
-    if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
+    public async Task<IActionResult> Register([FromForm] RegisterDto dto)
     {
-        using var httpClient = new HttpClient();
-
-        var content = new MultipartFormDataContent();
-        var fileStream = dto.ProfileImage.OpenReadStream();
-        var fileContent = new StreamContent(fileStream);
-        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(dto.ProfileImage.ContentType);
-
-        // ส่งไปยัง server 203
-        content.Add(fileContent, "file", dto.ProfileImage.FileName);
-
-        var uploadResponse = await httpClient.PostAsync("http://202.28.34.203:30000/upload", content);
-
-        if (!uploadResponse.IsSuccessStatusCode)
+        if (string.IsNullOrWhiteSpace(dto.Name) ||
+            string.IsNullOrWhiteSpace(dto.Email) ||
+            string.IsNullOrWhiteSpace(dto.Password))
         {
-            return BadRequest(new { message = "อัปโหลดรูปไม่สำเร็จ" });
+            return BadRequest(new { message = "กรอกข้อมูลให้ครบถ้วน" });
         }
 
-        var jsonString = await uploadResponse.Content.ReadAsStringAsync();
-        var json = System.Text.Json.JsonDocument.Parse(jsonString);
+        string? savedFileName = null;
+        if (dto.ProfileImage is { Length: > 0 })
+        {
+            using var http = new HttpClient();
+            using var form = new MultipartFormDataContent();
+            using var stream = dto.ProfileImage.OpenReadStream();
+            var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(dto.ProfileImage.ContentType);
 
-        // รับชื่อไฟล์จาก JSON ที่ฝั่ง 203 ส่งกลับ เช่น { "fileName": "abc.jpg" }
-        savedFileName =
-            json.RootElement.TryGetProperty("fileName", out var fn) ? fn.GetString() :
-            json.RootElement.TryGetProperty("filename", out var fn2) ? fn2.GetString() :
-            json.RootElement.TryGetProperty("path", out var fn3) ? fn3.GetString() :
-            null;
+            form.Add(fileContent, "file", dto.ProfileImage.FileName);
+
+            var resp = await http.PostAsync("http://202.28.34.203:30000/upload", form);
+            if (!resp.IsSuccessStatusCode)
+                return BadRequest(new { message = "อัปโหลดรูปไม่สำเร็จ" });
+
+            var json = await resp.Content.ReadAsStringAsync();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            savedFileName =
+                doc.RootElement.TryGetProperty("fileName", out var fn) ? fn.GetString() :
+                doc.RootElement.TryGetProperty("filename", out var fn2) ? fn2.GetString() :
+                doc.RootElement.TryGetProperty("path", out var fn3) ? fn3.GetString() : null;
+        }
+
+        var user = new User
+        {
+            Name = dto.Name,
+            Email = dto.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+            AvatarUrl = savedFileName // เก็บแค่ชื่อไฟล์ เช่น "abc.jpg"
+        };
+
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            user.Id,
+            user.Email,
+            user.Name,
+            user.AvatarUrl,
+            profileUrl = savedFileName is null ? null : $"http://202.28.34.203:30000/upload/{savedFileName}"
+        });
     }
-
-    // ✅ สร้าง user ใหม่
-    var user = new User
-    {
-        Name = dto.Name,
-        Email = dto.Email,
-        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-        AvatarUrl = savedFileName // เก็บเฉพาะชื่อไฟล์ เช่น "abc.jpg"
-    };
-
-    _db.Users.Add(user);
-    await _db.SaveChangesAsync();
-
-    return Ok(new
-    {
-        user.Id,
-        user.Email,
-        user.AvatarUrl,
-        profileUrl = savedFileName != null ? $"http://202.28.34.203:30000/upload/{savedFileName}" : null
-    });
-}
 
 
 
@@ -125,45 +123,45 @@ public async Task<IActionResult> Register([FromForm] RegisterDto dto)
 
 
 
-   
-    
+
+
     [HttpPut("updateByEmail")]
-public async Task<IActionResult> UpdateByEmail([FromForm] UpdateUserByEmailDto dto, IFormFile? profileImage)
-{
-    var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
-    if (user == null)
-        return NotFound(new { message = "User not found" });
-
-    user.Name = dto.Name ?? user.Name;
-
-    if (!string.IsNullOrEmpty(dto.Password))
+    public async Task<IActionResult> UpdateByEmail([FromForm] UpdateUserByEmailDto dto, IFormFile? profileImage)
     {
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
-    }
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+        if (user == null)
+            return NotFound(new { message = "User not found" });
 
-    if (profileImage != null)
-    {
-        var fileName = $"{Guid.NewGuid()}_{profileImage.FileName}";
-        var filePath = Path.Combine(_env.WebRootPath, "profile", fileName);
+        user.Name = dto.Name ?? user.Name;
 
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        if (!string.IsNullOrEmpty(dto.Password))
         {
-            await profileImage.CopyToAsync(stream);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
         }
 
-        user.AvatarUrl = fileName;
+        if (profileImage != null)
+        {
+            var fileName = $"{Guid.NewGuid()}_{profileImage.FileName}";
+            var filePath = Path.Combine(_env.WebRootPath, "profile", fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await profileImage.CopyToAsync(stream);
+            }
+
+            user.AvatarUrl = fileName;
+        }
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            user.Id,
+            user.Name,
+            user.Email,
+            user.AvatarUrl,
+            user.Role
+        });
     }
-
-    await _db.SaveChangesAsync();
-
-    return Ok(new
-    {
-        user.Id,
-        user.Name,
-        user.Email,
-        user.AvatarUrl,
-        user.Role
-    });
-}
 
 }
