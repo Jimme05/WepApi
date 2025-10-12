@@ -132,35 +132,69 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound(new { message = "User not found" });
 
+        // ✅ อัปเดตชื่อ
         user.Name = dto.Name ?? user.Name;
 
+        // ✅ อัปเดตรหัสผ่าน
         if (!string.IsNullOrEmpty(dto.Password))
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
         }
 
-        if (profileImage != null)
+        // ✅ ถ้ามีการอัปโหลดรูปใหม่
+        if (profileImage != null && profileImage.Length > 0)
         {
-            var fileName = $"{Guid.NewGuid()}_{profileImage.FileName}";
-            var filePath = Path.Combine(_env.WebRootPath, "profile", fileName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            try
             {
-                await profileImage.CopyToAsync(stream);
-            }
+                using var httpClient = new HttpClient();
+                using var form = new MultipartFormDataContent();
 
-            user.AvatarUrl = fileName;
+                // stream content
+                var fileContent = new StreamContent(profileImage.OpenReadStream());
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(profileImage.ContentType);
+
+                // เพิ่มลง form-data
+                form.Add(fileContent, "file", profileImage.FileName);
+
+                // ส่งไปยัง server 203
+                var uploadResponse = await httpClient.PostAsync("http://202.28.34.203:30000/upload", form);
+                if (!uploadResponse.IsSuccessStatusCode)
+                {
+                    return BadRequest(new { message = "อัปโหลดรูปไม่สำเร็จ" });
+                }
+
+                var responseJson = await uploadResponse.Content.ReadAsStringAsync();
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(responseJson);
+
+                // ✅ ดึงชื่อไฟล์กลับจาก response เช่น { "fileName": "abc.jpg" }
+                string? uploadedFileName = null;
+                if (jsonDoc.RootElement.TryGetProperty("fileName", out var fn))
+                    uploadedFileName = fn.GetString();
+                else if (jsonDoc.RootElement.TryGetProperty("filename", out var fn2))
+                    uploadedFileName = fn2.GetString();
+                else if (jsonDoc.RootElement.TryGetProperty("path", out var fn3))
+                    uploadedFileName = fn3.GetString();
+
+                if (uploadedFileName != null)
+                    user.AvatarUrl = uploadedFileName;
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "เกิดข้อผิดพลาดในการอัปโหลดรูป", error = ex.Message });
+            }
         }
 
         await _db.SaveChangesAsync();
 
+        // ✅ ตอบกลับข้อมูลล่าสุด
         return Ok(new
         {
             user.Id,
             user.Name,
             user.Email,
             user.AvatarUrl,
-            user.Role
+            user.Role,
+            profileUrl = user.AvatarUrl != null
         });
     }
 
