@@ -15,6 +15,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
     )
 );
+// Program.cs
+builder.Services.AddHttpClient("ImageOrigin", c =>
+{
+    c.BaseAddress = new Uri("http://202.28.34.203:30000/");
+    c.Timeout = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
