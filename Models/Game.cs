@@ -22,5 +22,16 @@ namespace SimpleAuthBasicApi.Models
         public DateTime ReleaseDate { get; set; } = DateTime.Now; // วันที่วางขายอัตโนมัติ
     }
    
+    public class UserLibraryItemDto
+{
+    public int GameId { get; set; }
+    public string Title { get; set; } = "";
+    public string Genre { get; set; } = "";
+    public decimal PriceCurrent { get; set; }          // ราคาปัจจุบันในตาราง Games
+    public string? ImagePath { get; set; }             // ชื่อไฟล์รูป/พาธ จาก Games
+    public int TotalQty { get; set; }                  // จำนวนรวมที่เป็นเจ้าของ
+    public DateTime LastPurchasedAt { get; set; }      // วันที่ซื้อครั้งล่าสุด
+    public decimal TotalSpent { get; set; }            // เงินที่จ่ายไปกับเกมนี้ทั้งหมด (จาก PriceAtPurchase)
+}
 
 }
