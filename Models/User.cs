@@ -46,3 +46,19 @@ public class EmailDto
 {
     public string Email { get; set; } = string.Empty;
 }
+public class UserGame
+{
+    public int Id { get; set; }
+
+    public int UserId { get; set; }
+    public int GameId { get; set; }
+    public int Qty { get; set; } = 1;
+
+    public decimal PriceAtPurchase { get; set; }
+    public DateTime PurchasedAt { get; set; } = DateTime.UtcNow;
+
+    // (ถ้ามี relation)
+    public User? User { get; set; }
+    public Game? Game { get; set; }
+}
+

@@ -49,7 +49,6 @@ public class TransactionsController : ControllerBase
             {
                 Id = t.Id,
                 UserId = t.UserId,
-                Email = user.Email,
                 Type = t.Type,                 // "topup" | "purchase"
                 Amount = t.Amount,
                 BalanceBefore = t.BalanceBefore,

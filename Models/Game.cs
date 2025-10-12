@@ -21,4 +21,6 @@ namespace SimpleAuthBasicApi.Models
 
         public DateTime ReleaseDate { get; set; } = DateTime.Now; // วันที่วางขายอัตโนมัติ
     }
+   
+
 }
