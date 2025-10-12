@@ -30,26 +30,55 @@ namespace SimpleAuthBasicApi.Controllers
         [HttpPost("topup")]
         public async Task<IActionResult> TopUp([FromBody] Transaction req)
         {
-            var wallet = await _db.Wallets.FirstOrDefaultAsync(w => w.UserId == req.UserId);
-            if (wallet == null) return NotFound();
+            if (req.UserId == 0)
+                return BadRequest(new { message = "UserId ต้องไม่เป็นค่าว่าง" });
 
+            // ✅ ค้นหา wallet ของ user
+            var wallet = await _db.Wallets.FirstOrDefaultAsync(w => w.UserId == req.UserId);
+
+            // ✅ ถ้ายังไม่มี wallet — สร้างใหม่ให้เลย
+            if (wallet == null)
+            {
+                wallet = new Wallet
+                {
+                    UserId = req.UserId,
+                    Balance = 0,
+                    
+                };
+
+                _db.Wallets.Add(wallet);
+                await _db.SaveChangesAsync(); // ต้อง save ก่อนเพื่อให้ Wallet.Id ถูกสร้าง
+            }
+
+            // ✅ ทำการเติมเงิน
             var before = wallet.Balance;
             wallet.Balance += req.Amount;
 
+            // ✅ บันทึก Transaction
             var trx = new Transaction
             {
                 UserId = req.UserId,
                 Type = "topup",
                 Amount = req.Amount,
-                Description = $"เติมเงินจำนวน {req.Amount}",
+                Description = $"เติมเงินจำนวน {req.Amount} บาท",
                 BalanceBefore = before,
-                BalanceAfter = wallet.Balance
+                BalanceAfter = wallet.Balance,
+                CreatedAt = DateTime.UtcNow
             };
 
             _db.Transactions.Add(trx);
             await _db.SaveChangesAsync();
-            return Ok(trx);
+
+            return Ok(new
+            {
+                message = "เติมเงินสำเร็จ",
+                wallet.Balance,
+                trx.Id,
+                trx.Description,
+                trx.CreatedAt
+            });
         }
+
 
         // ✅ ซื้อเกม
         [HttpPost("purchase")]
