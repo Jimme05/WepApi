@@ -20,34 +20,62 @@ public class AuthController : ControllerBase
 
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromForm] RegisterDto dto)
+public async Task<IActionResult> Register([FromForm] RegisterDto dto)
+{
+    string? savedFileName = null;
+
+    // ถ้ามีรูปโปรไฟล์แนบมาด้วย
+    if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
     {
-        string? savedPath = null;
+        using var httpClient = new HttpClient();
 
-        if (dto.ProfileImage != null)
+        var content = new MultipartFormDataContent();
+        var fileStream = dto.ProfileImage.OpenReadStream();
+        var fileContent = new StreamContent(fileStream);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(dto.ProfileImage.ContentType);
+
+        // ส่งไปยัง server 203
+        content.Add(fileContent, "file", dto.ProfileImage.FileName);
+
+        var uploadResponse = await httpClient.PostAsync("http://202.28.34.203:30000/upload", content);
+
+        if (!uploadResponse.IsSuccessStatusCode)
         {
-        
-            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.ProfileImage.FileName);
-        
-
-           
-
-            savedPath = fileName; // 👉 DB เก็บ path
+            return BadRequest(new { message = "อัปโหลดรูปไม่สำเร็จ" });
         }
 
-        var user = new User
-        {
-            Name = dto.Name,
-            Email = dto.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-            AvatarUrl = savedPath
-        };
+        var jsonString = await uploadResponse.Content.ReadAsStringAsync();
+        var json = System.Text.Json.JsonDocument.Parse(jsonString);
 
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-
-        return Ok(new { user.Id, user.Email, user.AvatarUrl });
+        // รับชื่อไฟล์จาก JSON ที่ฝั่ง 203 ส่งกลับ เช่น { "fileName": "abc.jpg" }
+        savedFileName =
+            json.RootElement.TryGetProperty("fileName", out var fn) ? fn.GetString() :
+            json.RootElement.TryGetProperty("filename", out var fn2) ? fn2.GetString() :
+            json.RootElement.TryGetProperty("path", out var fn3) ? fn3.GetString() :
+            null;
     }
+
+    // ✅ สร้าง user ใหม่
+    var user = new User
+    {
+        Name = dto.Name,
+        Email = dto.Email,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+        AvatarUrl = savedFileName // เก็บเฉพาะชื่อไฟล์ เช่น "abc.jpg"
+    };
+
+    _db.Users.Add(user);
+    await _db.SaveChangesAsync();
+
+    return Ok(new
+    {
+        user.Id,
+        user.Email,
+        user.AvatarUrl,
+        profileUrl = savedFileName != null ? $"http://202.28.34.203:30000/upload/{savedFileName}" : null
+    });
+}
+
 
 
 
