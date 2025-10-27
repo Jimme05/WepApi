@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using SimpleAuthBasicApi.Data;
 
@@ -16,11 +17,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     )
 );
 // Program.cs
-builder.Services.AddHttpClient("ImageOrigin", c =>
-{
-    c.BaseAddress = new Uri("http://202.28.34.203:30000/");
-    c.Timeout = TimeSpan.FromSeconds(10);
-});
+// Program.cs (แนะนำให้ใช้ IHttpClientFactory + handler แบบกำหนดเวอร์ชัน)
+builder.Services.AddHttpClient("img-proxy")
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler {
+        AutomaticDecompression = DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+    })
+    .ConfigureHttpClient(c => {
+        c.Timeout = TimeSpan.FromSeconds(20);
+        // บังคับเริ่มที่ HTTP/1.1 บางโฮสต์/รีเวิร์สพร็อกซีงอแงกับ H2
+        c.DefaultRequestVersion = HttpVersion.Version11;
+        c.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+    });
 
 builder.Services.AddCors(options =>
 {
