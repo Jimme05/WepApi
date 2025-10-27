@@ -66,3 +66,4 @@ public class RedeemDiscountDto
     public int UserId { get; set; }
     public decimal OrderAmount { get; set; }
 }
+
