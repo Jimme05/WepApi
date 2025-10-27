@@ -1,33 +1,44 @@
 using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
-[Route("api/proxy")]
-public class ProxyController : ControllerBase
+[Route("api/[controller]")]
+public class ImagesController : ControllerBase
 {
-    private readonly IHttpClientFactory _factory;
-    public ProxyController(IHttpClientFactory factory) => _factory = factory;
+    private readonly IHttpClientFactory _http;
 
-    // GET /api/proxy/image/{fileName}
-    [HttpGet("image/{fileName}")]
-    public async Task<IActionResult> Image(string fileName, CancellationToken ct)
+    // ปรับเป็น env var หรือค่า config ได้
+    private readonly string _origin = Environment.GetEnvironmentVariable("SOURCE_ORIGIN")
+                                      ?? "http://202.28.34.203:30000";
+
+    public ImagesController(IHttpClientFactory http)
     {
-        if (string.IsNullOrWhiteSpace(fileName))
-            return BadRequest(new { message = "fileName required" });
+        _http = http;
+    }
 
-        // กัน path traversal, รับแค่ชื่อไฟล์
-        fileName = Path.GetFileName(fileName);
+    // GET: /api/Images/proxy/upload/{*path}
+    [HttpGet("proxy/upload/{*path}")]
+    public async Task<IActionResult> ProxyUpload([FromRoute] string path, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest("path is required.");
 
-        var client = _factory.CreateClient("ImageOrigin");
-        var upstreamUrl = $"upload/{Uri.EscapeDataString(fileName)}";
+        // กัน path traversal เล็กน้อย
+        if (path.Contains("..")) return BadRequest("invalid path");
 
-        var resp = await client.GetAsync(upstreamUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (!resp.IsSuccessStatusCode) return NotFound();
+        var upstreamUrl = $"{_origin}/upload/{path}";
+        var client = _http.CreateClient();
 
-        var contentType = resp.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
-        var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var upstream = await client.GetAsync(upstreamUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!upstream.IsSuccessStatusCode)
+            return StatusCode((int)upstream.StatusCode, $"Upstream error {upstream.StatusCode}");
 
-        // แคช 1 วัน (ปรับตามต้องการ)
-        Response.Headers["Cache-Control"] = "public, max-age=86400";
-        return File(stream, contentType);
+        var contentType = upstream.Content.Headers.ContentType?.ToString()
+                          ?? "application/octet-stream";
+        var cacheControl = upstream.Headers.CacheControl?.ToString()
+                          ?? "public, max-age=604800, immutable"; // 7 วัน
+
+        var stream = await upstream.Content.ReadAsStreamAsync(ct);
+        Response.Headers["Cache-Control"] = cacheControl;
+        return File(stream, contentType); // stream ผ่าน HTTPS ของ Render
     }
 }
