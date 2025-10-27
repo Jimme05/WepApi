@@ -86,10 +86,45 @@ public class DiscountCodesController : ControllerBase
 
         // เพิ่ม UsedCount
         dc.UsedCount += 1;
+        if (dc.MaxUses.HasValue && dc.UsedCount >= dc.MaxUses.Value)
+            dc.IsActive = false;
+
         await _db.SaveChangesAsync();
         await tx.CommitAsync();
 
         return Ok(new { discountApplied = applied, finalAmount = final });
+    }
+
+    // ✅ ฟังก์ชันใหม่ — ใช้จริงในตอน Purchase
+    // จะคำนวณส่วนลด + อัปเดต UsedCount + บันทึก DiscountRedemption ให้ในครั้งเดียว
+    public async Task<(decimal discountApplied, decimal finalAmount, DiscountCode? dc)>
+        ApplyAndRedeemForPurchaseAsync(int userId, string? code, decimal orderAmount)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return (0, orderAmount, null);
+
+        var (ok, msg, applied, final, dc) = await ValidateAndCalcAsync(
+            code, userId, orderAmount, previewOnly: false, forUpdate: true);
+
+        if (!ok || dc == null)
+            return (0, orderAmount, null);
+
+        // บันทึกการใช้คูปองจริง
+        _db.DiscountRedemptions.Add(new DiscountRedemption
+        {
+            DiscountCodeId = dc.Id,
+            UserId = userId,
+            OrderAmount = orderAmount,
+            DiscountApplied = applied,
+            FinalAmount = final
+        });
+
+        dc.UsedCount += 1;
+        if (dc.MaxUses.HasValue && dc.UsedCount >= dc.MaxUses.Value)
+            dc.IsActive = false;
+
+        await _db.SaveChangesAsync();
+        return (applied, final, dc);
     }
 
     // ====== Core validate & calc ======
@@ -101,8 +136,6 @@ public class DiscountCodesController : ControllerBase
 
         code = code.Trim().ToUpperInvariant();
 
-        // ถ้าต้องการ lock แถวเพื่อ update ให้ใช้ FOR UPDATE (Pomelo ไม่มีง่ายแบบตรงๆ)
-        // ใช้อ่านปกติ + เช็คอีกชั้นด้วย commit transaction เพียงพอสำหรับเคสนี้
         var dc = await _db.DiscountCodes.FirstOrDefaultAsync(x => x.Code == code);
         if (dc is null) return (false, "ไม่พบโค้ดส่วนลด", 0, orderAmount, null);
 
@@ -127,7 +160,6 @@ public class DiscountCodesController : ControllerBase
             ? Math.Round(orderAmount * (dc.Amount / 100m), 2, MidpointRounding.AwayFromZero)
             : dc.Amount;
 
-        // ไม่ให้ส่วนลดเกินยอด
         if (applied > orderAmount) applied = orderAmount;
 
         var final = orderAmount - applied;
