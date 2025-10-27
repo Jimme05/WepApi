@@ -5,7 +5,7 @@ namespace SimpleAuthBasicApi.Data;
 
 public class AppDbContext : DbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) {}
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
     public DbSet<User> Users => Set<User>();
     public DbSet<Game> Games { get; set; }
     public DbSet<Wallet> Wallets { get; set; }
@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
 
     public DbSet<UserGame> UserGames { get; set; }
 
+    public DbSet<DiscountCode> DiscountCodes => Set<DiscountCode>();
+    public DbSet<DiscountRedemption> DiscountRedemptions => Set<DiscountRedemption>();
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -32,5 +34,24 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             e.HasIndex(x => x.Email).IsUnique();
         });
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<DiscountCode>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.MinOrderAmount).HasColumnType("decimal(18,2)");
+        });
+
+        modelBuilder.Entity<DiscountRedemption>(e =>
+        {
+            e.Property(x => x.OrderAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.DiscountApplied).HasColumnType("decimal(18,2)");
+            e.Property(x => x.FinalAmount).HasColumnType("decimal(18,2)");
+            e.HasOne(x => x.DiscountCode)
+                .WithMany(c => c.Redemptions)
+                .HasForeignKey(x => x.DiscountCodeId);
+        });
     }
 }
+
